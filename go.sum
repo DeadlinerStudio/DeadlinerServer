@@ -1,0 +1,4 @@
+github.com/cloudwego/kitex v0.16.2 h1:dI3ha2st1hwexqA+n9xDdGlb3oQZqbhxNDpe+WmIwww=
+github.com/cloudwego/kitex v0.16.2/go.mod h1:d00UXGqwA778piM8nDNVWxOs4XhTX4SHyrQ7YpaojYg=
+github.com/cloudwego/prutal v0.2.1 h1:9w2xuqdnhM60jbGnC2eyvwN2vYhv/sDot5aIQ/YP39M=
+github.com/cloudwego/prutal v0.2.1/go.mod h1:zkzT60Ozm0S5HqPGbTyjV+vywtQdKXWjMhMo+IgaaWQ=
