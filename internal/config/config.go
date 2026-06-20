@@ -10,6 +10,7 @@ const DefaultPath = "conf/config.json"
 
 type Config struct {
 	Service  ServiceConfig
+	Auth     AuthConfig
 	Database DatabaseConfig
 	Sync     SyncConfig
 }
@@ -24,6 +25,14 @@ type DatabaseConfig struct {
 	DSN    string
 }
 
+type AuthConfig struct {
+	AccessTokenSecret     string
+	AccessTokenTTLMinutes int32
+	RefreshTokenTTLHours  int32
+	PasswordHashCost      int
+	RandomTokenBytes      int
+}
+
 type SyncConfig struct {
 	DefaultPullLimit int32
 	MaxPullLimit     int32
@@ -34,6 +43,13 @@ func Default() Config {
 		Service: ServiceConfig{
 			Name:    "deadliner",
 			Address: ":8888",
+		},
+		Auth: AuthConfig{
+			AccessTokenSecret:     "change-me-in-production",
+			AccessTokenTTLMinutes: 60 * 24,
+			RefreshTokenTTLHours:  24 * 30,
+			PasswordHashCost:      12,
+			RandomTokenBytes:      32,
 		},
 		Database: DatabaseConfig{
 			Driver: "mysql",
@@ -54,6 +70,21 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Service.Address == "" {
 		c.Service.Address = defaults.Service.Address
+	}
+	if c.Auth.AccessTokenSecret == "" {
+		c.Auth.AccessTokenSecret = defaults.Auth.AccessTokenSecret
+	}
+	if c.Auth.AccessTokenTTLMinutes == 0 {
+		c.Auth.AccessTokenTTLMinutes = defaults.Auth.AccessTokenTTLMinutes
+	}
+	if c.Auth.RefreshTokenTTLHours == 0 {
+		c.Auth.RefreshTokenTTLHours = defaults.Auth.RefreshTokenTTLHours
+	}
+	if c.Auth.PasswordHashCost == 0 {
+		c.Auth.PasswordHashCost = defaults.Auth.PasswordHashCost
+	}
+	if c.Auth.RandomTokenBytes == 0 {
+		c.Auth.RandomTokenBytes = defaults.Auth.RandomTokenBytes
 	}
 	if c.Database.Driver == "" {
 		c.Database.Driver = defaults.Database.Driver

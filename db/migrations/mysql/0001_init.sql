@@ -28,12 +28,14 @@ CREATE TABLE sessions (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     session_uid VARCHAR(64) NOT NULL,
     account_id BIGINT NOT NULL,
+    device_uid VARCHAR(64) NOT NULL,
     refresh_token_hash VARCHAR(255) NOT NULL,
     expires_at DATETIME(3) NOT NULL,
     revoked_at DATETIME(3) NULL,
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     UNIQUE KEY uk_sessions_session_uid (session_uid),
     KEY idx_sessions_account_id (account_id),
+    KEY idx_sessions_device_uid (device_uid),
     CONSTRAINT fk_sessions_account_id FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -116,4 +118,3 @@ CREATE TABLE mutation_receipts (
     KEY idx_mutation_receipts_account_device (account_id, device_uid, mutation_id),
     CONSTRAINT fk_mutation_receipts_account_id FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-

@@ -3,6 +3,13 @@
     "name": "deadliner",
     "address": ":8888"
   },
+  "auth": {
+    "accessTokenSecret": "change-me-in-production",
+    "accessTokenTTLMinutes": 1440,
+    "refreshTokenTTLHours": 720,
+    "passwordHashCost": 12,
+    "randomTokenBytes": 32
+  },
   "database": {
     "driver": "mysql",
     "dsn": "deadliner:deadliner@tcp(127.0.0.1:3306)/deadliner?charset=utf8mb4&parseTime=True&loc=Local"

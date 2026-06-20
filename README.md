@@ -3,7 +3,7 @@
 DeadlinerServer is the open-source, self-hostable Go backend for Deadliner.
 
 This repository is being built as a Kitex-based, multi-user backend with strict
-account isolation, `app / domain / infra / service` layered architecture, and a
+account isolation, `app / domain / infra` layered architecture, and a
 backend-first sync model for iOS, Android, and HarmonyOS.
 
 ## Current Scope
@@ -37,26 +37,35 @@ repository moves Deadliner toward a backend-first model where:
 
 The initial architecture and delivery plan lives at:
 
-- [docs/plan/0001-foundation.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0001-foundation.md)
-- [docs/plan/0002-sync-product-shape.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0002-sync-product-shape.md)
-- [docs/plan/0003-idempotency-and-convergence.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0003-idempotency-and-convergence.md)
+- [docs/plan/README.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/README.md)
+- [docs/plan/0001-foundation/README.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0001-foundation/README.md)
+- [docs/plan/0002-sync-product-shape/README.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0002-sync-product-shape/README.md)
+- [docs/plan/0003-idempotency-and-convergence/README.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0003-idempotency-and-convergence/README.md)
 
 ## Layout
 
 ```text
-main.go / handler.go       Kitex-generated service bootstrap
-build.sh / script/         Kitex runtime packaging scripts
+cmd/deadlinerserver/       process entrypoint
 conf/                      JSON runtime configuration
 db/migrations/             driver-specific SQL schema
 docs/plan/                 SDD-style planning artifacts
 idl/                       Kitex thrift contracts
-internal/app/              app-layer commands and DTOs
-internal/domain/           models, services, repository contracts
-internal/infra/            GORM and storage adapters
+internal/app/              bootstrap, auth context, use cases, transport mappers
+internal/domain/           models, services, repository and provider contracts
+internal/infra/            GORM and provider adapters
 internal/config/           local config defaults
 internal/utils/            shared utility helpers
+script/                    packaging and runtime bootstrap scripts
 kitex_gen/                 generated thrift and service stubs
 ```
+
+The repository root intentionally keeps only the conventional Go / Kitex /
+open-source entry files, such as `go.mod`, `go.sum`, `Makefile`, `README.md`,
+`LICENSE`, `.gitignore`, and `kitex_info.yaml`.
+
+Within `docs/plan/`, each numbered topic now uses a small directory package
+with a `README` and focused subdocuments so planning can evolve without
+creating another 300-line monolith.
 
 ## Local Commands
 
@@ -64,14 +73,26 @@ kitex_gen/                 generated thrift and service stubs
 make test
 make test-rpc
 make run
+make package
 make generate
 ```
+
+## CI
+
+GitHub Actions now runs [`.github/workflows/ci.yml`](/Users/aritxonly/Codes/Golang/DeadlinerServer/.github/workflows/ci.yml) on pull requests and pushes to `main`.
+
+The workflow currently does three things:
+
+- verifies `gofmt` cleanliness under `cmd/` and `internal/`
+- runs the full Go test suite
+- packages the Linux server binary and uploads it as a workflow artifact
 
 Notes:
 
 - `make test` verifies the foundation packages under `internal/...`
 - `make test-rpc` verifies the generated Kitex service packages too
-- first-time Kitex dependency resolution may still require outbound module access
+- `make run` now starts [cmd/deadlinerserver/main.go](/Users/aritxonly/Codes/Golang/DeadlinerServer/cmd/deadlinerserver/main.go)
+- `make package` now runs [script/build.sh](/Users/aritxonly/Codes/Golang/DeadlinerServer/script/build.sh)
 - runtime config is loaded from [conf/config.json](/Users/aritxonly/Codes/Golang/DeadlinerServer/conf/config.json)
-- `infra/gorm` currently needs GORM dependency checksums in `go.sum` before full package tests can pass
+- auth config now includes access token secret, token TTLs, and password hash cost
 - `make generate` requires the Kitex CLI to be installed locally

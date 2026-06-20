@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test And Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify Formatting
+        run: |
+          unformatted_files="$(gofmt -l ./cmd ./internal)"
+          if [ -n "$unformatted_files" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted_files"
+            exit 1
+          fi
+
+      - name: Run Foundation Tests
+        run: make test
+
+      - name: Run RPC Tests
+        run: make test-rpc
+
+  package:
+    name: Package Binary
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build Package
+        run: bash ./script/build.sh
+
+      - name: Upload Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deadlinerserver-linux-amd64
+          path: |
+            output/bin/deadliner
+            output/bootstrap.sh
+          if-no-files-found: error

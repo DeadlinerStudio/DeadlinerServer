@@ -34,6 +34,12 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Service.Address == "" {
 		t.Fatal("expected default service address")
 	}
+	if cfg.Auth.AccessTokenSecret == "" {
+		t.Fatal("expected default access token secret")
+	}
+	if cfg.Auth.AccessTokenTTLMinutes == 0 || cfg.Auth.RefreshTokenTTLHours == 0 {
+		t.Fatal("expected auth ttl defaults")
+	}
 	if cfg.Database.DSN == "" {
 		t.Fatal("expected default database dsn")
 	}

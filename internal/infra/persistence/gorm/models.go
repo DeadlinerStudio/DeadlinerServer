@@ -31,6 +31,7 @@ type SessionModel struct {
 	ID               int64     `gorm:"primaryKey;autoIncrement"`
 	SessionUID       string    `gorm:"size:64;uniqueIndex;not null"`
 	AccountID        int64     `gorm:"index;not null"`
+	DeviceUID        string    `gorm:"size:64;index;not null"`
 	RefreshTokenHash string    `gorm:"size:255;not null"`
 	ExpiresAt        time.Time `gorm:"not null"`
 	RevokedAt        *time.Time
