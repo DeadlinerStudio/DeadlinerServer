@@ -4,8 +4,32 @@ RUN_NAME="deadliner"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 OUTPUT_DIR="$ROOT_DIR/output"
-GO_CACHE_DIR="${GOCACHE:-/private/tmp/deadlinerserver-gocache}"
-GO_MOD_CACHE_DIR="${GOMODCACHE:-/private/tmp/deadlinerserver-gomodcache}"
+TMP_ROOT="${TMPDIR:-/tmp}"
+TMP_ROOT="${TMP_ROOT%/}"
+
+DEFAULT_GO_CACHE_DIR=$(go env GOCACHE 2>/dev/null || true)
+DEFAULT_GO_MOD_CACHE_DIR=$(go env GOMODCACHE 2>/dev/null || true)
+
+resolve_writable_dir() {
+    local candidate="$1"
+    local fallback="$2"
+    local probe_file=""
+
+    if [ -n "$candidate" ] && mkdir -p "$candidate" 2>/dev/null; then
+        probe_file="$candidate/.deadlinerserver-write-test"
+        if ( : > "$probe_file" ) 2>/dev/null; then
+            rm -f "$probe_file"
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    fi
+
+    mkdir -p "$fallback"
+    printf '%s\n' "$fallback"
+}
+
+GO_CACHE_DIR=$(resolve_writable_dir "${GOCACHE:-$DEFAULT_GO_CACHE_DIR}" "${TMP_ROOT}/deadlinerserver-gocache")
+GO_MOD_CACHE_DIR=$(resolve_writable_dir "${GOMODCACHE:-$DEFAULT_GO_MOD_CACHE_DIR}" "${TMP_ROOT}/deadlinerserver-gomodcache")
 
 mkdir -p "$OUTPUT_DIR/bin"
 mkdir -p "$GO_CACHE_DIR" "$GO_MOD_CACHE_DIR"

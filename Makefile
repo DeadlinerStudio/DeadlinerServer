@@ -1,6 +1,8 @@
 MODULE := github.com/aritxonly/deadlinerserver
 SERVICE := deadliner
 IDL := idl/deadliner.thrift
+TMP_ROOT ?= $(if $(TMPDIR),$(TMPDIR),/tmp)
+GO_CACHE_DIR ?= $(TMP_ROOT)/deadlinerserver-gocache
 
 .PHONY: fmt test test-rpc run package generate
 
@@ -8,13 +10,13 @@ fmt:
 	gofmt -w ./cmd ./internal
 
 test:
-	GOCACHE=/private/tmp/deadlinerserver-gocache go test -vet=off ./internal/app ./internal/config ./internal/domain/... ./internal/utils
+	GOCACHE=$(GO_CACHE_DIR) go test -vet=off ./internal/app ./internal/config ./internal/domain/... ./internal/utils
 
 test-rpc:
-	GOCACHE=/private/tmp/deadlinerserver-gocache go test -vet=off ./...
+	GOCACHE=$(GO_CACHE_DIR) go test -vet=off ./...
 
 run:
-	GOCACHE=/private/tmp/deadlinerserver-gocache go run ./cmd/deadlinerserver
+	GOCACHE=$(GO_CACHE_DIR) go run ./cmd/deadlinerserver
 
 package:
 	./script/build.sh
