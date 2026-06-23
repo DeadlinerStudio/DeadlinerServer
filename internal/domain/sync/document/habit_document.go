@@ -3,7 +3,6 @@ package document
 type HabitConfig struct {
 	Name           string        `json:"name"`
 	Description    string        `json:"description"`
-	Color          int32         `json:"color"`
 	IconKey        string        `json:"icon_key"`
 	Period         HabitPeriod   `json:"period"`
 	TimesPerPeriod int32         `json:"times_per_period"`

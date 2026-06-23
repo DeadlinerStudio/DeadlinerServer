@@ -14,7 +14,7 @@ import (
 )
 
 func TestPushChangesApplied(t *testing.T) {
-	service, deadlineRepo, receiptRepo, changeRepo := newTestSyncService()
+	service, deadlineRepo, _, receiptRepo, changeRepo := newTestSyncService()
 	result, err := service.PushChanges(context.Background(), commandpkg.PushChangesCommand{
 		AccountUID: "acc-1",
 		DeviceUID:  "device-1",
@@ -43,7 +43,7 @@ func TestPushChangesApplied(t *testing.T) {
 }
 
 func TestPushChangesReplay(t *testing.T) {
-	service, _, receiptRepo, _ := newTestSyncService()
+	service, _, _, receiptRepo, _ := newTestSyncService()
 	receiptRepo.saved["device-1:1"] = &statepkg.MutationReceipt{
 		AccountID: 1, DeviceUID: "device-1", MutationID: "device-1:1", EntityUID: "ddl-1",
 		Status: commandpkg.MutationStatusApplied,
@@ -63,15 +63,92 @@ func TestPushChangesReplay(t *testing.T) {
 }
 
 func TestPullChangesFiltersDeletedAndReportsHasMore(t *testing.T) {
-	service, deadlineRepo, _, _ := newTestSyncService()
+	service, deadlineRepo, habitRepo, _, _ := newTestSyncService()
 	deadlineRepo.saved["ddl-1"] = &statepkg.DeadlineChange{EntityUID: "ddl-1", ServerVersion: statepkg.ServerVersion{ChangeID: 1}, Document: documentpkg.DeadlineDocument{UID: "ddl-1", Name: "Keep active", State: documentpkg.DeadlineStateActive, Type: documentpkg.DeadlineTypeTask}}
 	deadlineRepo.saved["ddl-2"] = &statepkg.DeadlineChange{EntityUID: "ddl-2", Deleted: true, ServerVersion: statepkg.ServerVersion{ChangeID: 2}, Document: documentpkg.DeadlineDocument{UID: "ddl-2", Name: "Deleted", State: documentpkg.DeadlineStateCompleted, Type: documentpkg.DeadlineTypeTask}}
 	deadlineRepo.saved["ddl-3"] = &statepkg.DeadlineChange{EntityUID: "ddl-3", ServerVersion: statepkg.ServerVersion{ChangeID: 3}, Document: documentpkg.DeadlineDocument{UID: "ddl-3", Name: "Still active", State: documentpkg.DeadlineStateActive, Type: documentpkg.DeadlineTypeTask}}
+	habitRepo.saved["ddl-h1"] = &statepkg.HabitChange{EntityUID: "ddl-h1", ServerVersion: statepkg.ServerVersion{ChangeID: 4}, Document: documentpkg.HabitDocument{DDLUID: "ddl-h1"}}
 	result, err := service.PullChanges(context.Background(), commandpkg.PullChangesCommand{
 		AccountUID: "acc-1", DeviceUID: "device-1", Cursor: "0", Limit: 1, IncludeDelete: false,
 	})
 	if err != nil || len(result.DeadlineChanges) != 1 || result.DeadlineChanges[0].EntityUID != "ddl-1" || !result.HasMore {
 		t.Fatalf("unexpected pull result: %+v err=%v", result, err)
+	}
+}
+
+func TestPushChangesHabitApplied(t *testing.T) {
+	service, _, habitRepo, receiptRepo, changeRepo := newTestSyncService()
+	result, err := service.PushChanges(context.Background(), commandpkg.PushChangesCommand{
+		AccountUID: "acc-1",
+		DeviceUID:  "device-1",
+		Mutations: []commandpkg.Mutation{{
+			MutationID: "device-1:habit-1",
+			DeviceUID:  "device-1",
+			EntityUID:  "ddl-habit-1",
+			Habit: &commandpkg.HabitPatch{
+				Document: documentpkg.HabitDocument{
+					DDLUID: "ddl-habit-1",
+					Habit: documentpkg.HabitConfig{
+						Name:           "Walk",
+						Period:         documentpkg.HabitPeriodDaily,
+						GoalType:       documentpkg.HabitGoalTypePerPeriod,
+						Status:         documentpkg.HabitStatusActive,
+						TimesPerPeriod: 1,
+					},
+				},
+			},
+		}},
+	})
+	if err != nil || len(result.Results) != 1 || result.Results[0].Status != commandpkg.MutationStatusApplied {
+		t.Fatalf("unexpected push result: %+v err=%v", result, err)
+	}
+	if len(result.HabitChanges) != 1 || habitRepo.saved["ddl-habit-1"].Document.Habit.Name != "Walk" {
+		t.Fatalf("habit was not persisted")
+	}
+	if _, ok := receiptRepo.saved["device-1:habit-1"]; !ok || len(changeRepo.saved) != 1 || changeRepo.saved[0].EntityKind != "habit" {
+		t.Fatalf("expected habit receipt and sync change to be saved")
+	}
+}
+
+func TestPullChangesMergesDeadlineAndHabitByCursor(t *testing.T) {
+	service, deadlineRepo, habitRepo, _, _ := newTestSyncService()
+	deadlineRepo.saved["ddl-1"] = &statepkg.DeadlineChange{
+		EntityUID:     "ddl-1",
+		ServerVersion: statepkg.ServerVersion{ChangeID: 1},
+		Document: documentpkg.DeadlineDocument{
+			UID: "ddl-1", Name: "Deadline one", State: documentpkg.DeadlineStateActive, Type: documentpkg.DeadlineTypeTask,
+		},
+	}
+	habitRepo.saved["ddl-h1"] = &statepkg.HabitChange{
+		EntityUID:     "ddl-h1",
+		ServerVersion: statepkg.ServerVersion{ChangeID: 2},
+		Document: documentpkg.HabitDocument{
+			DDLUID: "ddl-h1",
+			Habit:  documentpkg.HabitConfig{Name: "Habit one", Period: documentpkg.HabitPeriodDaily, GoalType: documentpkg.HabitGoalTypePerPeriod, Status: documentpkg.HabitStatusActive},
+		},
+	}
+	deadlineRepo.saved["ddl-2"] = &statepkg.DeadlineChange{
+		EntityUID:     "ddl-2",
+		ServerVersion: statepkg.ServerVersion{ChangeID: 3},
+		Document: documentpkg.DeadlineDocument{
+			UID: "ddl-2", Name: "Deadline two", State: documentpkg.DeadlineStateActive, Type: documentpkg.DeadlineTypeTask,
+		},
+	}
+
+	result, err := service.PullChanges(context.Background(), commandpkg.PullChangesCommand{
+		AccountUID: "acc-1", DeviceUID: "device-1", Cursor: "0", Limit: 2, IncludeDelete: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.NextCursor != "2" || !result.HasMore {
+		t.Fatalf("unexpected cursor result: %+v", result)
+	}
+	if len(result.DeadlineChanges) != 1 || result.DeadlineChanges[0].EntityUID != "ddl-1" {
+		t.Fatalf("unexpected deadline changes: %+v", result.DeadlineChanges)
+	}
+	if len(result.HabitChanges) != 1 || result.HabitChanges[0].EntityUID != "ddl-h1" {
+		t.Fatalf("unexpected habit changes: %+v", result.HabitChanges)
 	}
 }
 
@@ -123,6 +200,41 @@ func (r *testDeadlineRepo) ListAfterChangeID(_ context.Context, _ int64, afterCh
 	return changes, nil
 }
 
+type testHabitRepo struct {
+	saved map[string]*statepkg.HabitChange
+}
+
+func (r *testHabitRepo) FindByDDLUID(_ context.Context, _ int64, ddlUID string) (*statepkg.HabitChange, error) {
+	if change, ok := r.saved[ddlUID]; ok {
+		cloned := *change
+		return &cloned, nil
+	}
+	return nil, nil
+}
+func (r *testHabitRepo) Save(_ context.Context, params portpkg.SaveHabitParams) error {
+	r.saved[params.Document.DDLUID] = &statepkg.HabitChange{
+		EntityUID:     params.Document.DDLUID,
+		Deleted:       params.Deleted,
+		ServerVersion: params.ServerVersion,
+		Document:      params.Document,
+	}
+	return nil
+}
+func (r *testHabitRepo) ListAfterChangeID(_ context.Context, _ int64, afterChangeID int64, limit int, includeDeleted bool) ([]statepkg.HabitChange, error) {
+	changes := make([]statepkg.HabitChange, 0, len(r.saved))
+	for _, change := range r.saved {
+		if change.ServerVersion.ChangeID <= afterChangeID || (!includeDeleted && change.Deleted) {
+			continue
+		}
+		changes = append(changes, *change)
+	}
+	sort.Slice(changes, func(i, j int) bool { return changes[i].ServerVersion.ChangeID < changes[j].ServerVersion.ChangeID })
+	if limit > 0 && len(changes) > limit {
+		changes = changes[:limit]
+	}
+	return changes, nil
+}
+
 type testMutationReceiptRepo struct {
 	saved map[string]*statepkg.MutationReceipt
 }
@@ -157,11 +269,12 @@ func (r *testSyncChangeRepo) ListAfterChangeID(context.Context, int64, int64, in
 	return nil, nil
 }
 
-func newTestSyncService() (Service, *testDeadlineRepo, *testMutationReceiptRepo, *testSyncChangeRepo) {
+func newTestSyncService() (Service, *testDeadlineRepo, *testHabitRepo, *testMutationReceiptRepo, *testSyncChangeRepo) {
 	deadlineRepo := &testDeadlineRepo{saved: map[string]*statepkg.DeadlineChange{}}
+	habitRepo := &testHabitRepo{saved: map[string]*statepkg.HabitChange{}}
 	receiptRepo := &testMutationReceiptRepo{saved: map[string]*statepkg.MutationReceipt{}}
 	changeRepo := &testSyncChangeRepo{}
-	return NewService(&testAccountRepo{}, deadlineRepo, receiptRepo, changeRepo), deadlineRepo, receiptRepo, changeRepo
+	return NewService(&testAccountRepo{}, deadlineRepo, habitRepo, receiptRepo, changeRepo), deadlineRepo, habitRepo, receiptRepo, changeRepo
 }
 
 func mustJSON(t *testing.T, value any) []byte {

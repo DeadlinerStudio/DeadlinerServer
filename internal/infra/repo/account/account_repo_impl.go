@@ -97,11 +97,17 @@ func (r *accountRepo) SaveAccount(ctx context.Context, acc *domainAccount.Accoun
 	case err != nil:
 		return err
 	default:
-		model.ID = existing.ID
-		if err := r.db.WithContext(ctx).Save(&model).Error; err != nil {
+		if err := r.db.WithContext(ctx).
+			Model(&existing).
+			Updates(map[string]interface{}{
+				"account_uid":   model.AccountUID,
+				"email":         model.Email,
+				"password_hash": model.PasswordHash,
+				"display_name":  model.DisplayName,
+			}).Error; err != nil {
 			return err
 		}
-		acc.ID = model.ID
+		acc.ID = existing.ID
 		return nil
 	}
 }
@@ -115,12 +121,27 @@ func (r *accountRepo) SaveDevice(ctx context.Context, device *domainAccount.Devi
 		Take(&existing).Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		return r.db.WithContext(ctx).Create(&model).Error
+		if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
+			return err
+		}
+		device.ID = model.ID
+		return nil
 	case err != nil:
 		return err
 	default:
-		model.ID = existing.ID
-		return r.db.WithContext(ctx).Save(&model).Error
+		if err := r.db.WithContext(ctx).
+			Model(&existing).
+			Updates(map[string]interface{}{
+				"account_id":   model.AccountID,
+				"device_uid":   model.DeviceUID,
+				"platform":     model.Platform,
+				"device_name":  model.DeviceName,
+				"last_seen_at": model.LastSeenAt,
+			}).Error; err != nil {
+			return err
+		}
+		device.ID = existing.ID
+		return nil
 	}
 }
 
@@ -144,11 +165,19 @@ func (r *accountRepo) SaveSession(ctx context.Context, session *domainAccount.Se
 	case err != nil:
 		return err
 	default:
-		model.ID = existing.ID
-		if err := r.db.WithContext(ctx).Save(&model).Error; err != nil {
+		if err := r.db.WithContext(ctx).
+			Model(&existing).
+			Updates(map[string]interface{}{
+				"session_uid":        model.SessionUID,
+				"account_id":         model.AccountID,
+				"device_uid":         model.DeviceUID,
+				"refresh_token_hash": model.RefreshTokenHash,
+				"expires_at":         model.ExpiresAt,
+				"revoked_at":         model.RevokedAt,
+			}).Error; err != nil {
 			return err
 		}
-		session.ID = model.ID
+		session.ID = existing.ID
 		return nil
 	}
 }

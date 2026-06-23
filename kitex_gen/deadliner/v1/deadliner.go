@@ -671,7 +671,6 @@ var fieldIDToName_DeadlineDocument = map[int16]string{
 type HabitConfig struct {
 	Name           string `thrift:"name,1" frugal:"1,default,string" json:"name"`
 	Description    string `thrift:"description,2" frugal:"2,default,string" json:"description"`
-	Color          int32  `thrift:"color,3" frugal:"3,default,i32" json:"color"`
 	IconKey        string `thrift:"icon_key,4" frugal:"4,default,string" json:"icon_key"`
 	Period         string `thrift:"period,5" frugal:"5,default,string" json:"period"`
 	TimesPerPeriod int32  `thrift:"times_per_period,6" frugal:"6,default,i32" json:"times_per_period"`
@@ -697,10 +696,6 @@ func (p *HabitConfig) GetName() (v string) {
 
 func (p *HabitConfig) GetDescription() (v string) {
 	return p.Description
-}
-
-func (p *HabitConfig) GetColor() (v int32) {
-	return p.Color
 }
 
 func (p *HabitConfig) GetIconKey() (v string) {
@@ -748,9 +743,6 @@ func (p *HabitConfig) SetName(val string) {
 func (p *HabitConfig) SetDescription(val string) {
 	p.Description = val
 }
-func (p *HabitConfig) SetColor(val int32) {
-	p.Color = val
-}
 func (p *HabitConfig) SetIconKey(val string) {
 	p.IconKey = val
 }
@@ -792,7 +784,6 @@ func (p *HabitConfig) String() string {
 var fieldIDToName_HabitConfig = map[int16]string{
 	1:  "name",
 	2:  "description",
-	3:  "color",
 	4:  "icon_key",
 	5:  "period",
 	6:  "times_per_period",

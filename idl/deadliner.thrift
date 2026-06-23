@@ -82,7 +82,6 @@ struct DeadlineDocument {
 struct HabitConfig {
     1: string name
     2: string description
-    3: i32 color
     4: string icon_key
     5: string period
     6: i32 times_per_period

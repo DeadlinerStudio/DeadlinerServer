@@ -2,6 +2,8 @@ package gorm
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"gorm.io/gorm"
@@ -23,7 +25,15 @@ func Open(driver, dsn string) (*gorm.DB, error) {
 	}
 
 	return gorm.Open(factory(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		Logger: logger.New(
+			log.New(os.Stdout, "GORM ", log.LstdFlags|log.Lmicroseconds),
+			logger.Config{
+				SlowThreshold:             200 * time.Millisecond,
+				LogLevel:                  logger.Warn,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  false,
+			},
+		),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},

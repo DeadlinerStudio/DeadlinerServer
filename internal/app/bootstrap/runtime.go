@@ -6,7 +6,6 @@ import (
 	appauth "github.com/aritxonly/deadlinerserver/internal/app/auth"
 	appaccount "github.com/aritxonly/deadlinerserver/internal/app/service/account"
 	appsync "github.com/aritxonly/deadlinerserver/internal/app/service/sync"
-	transportkitex "github.com/aritxonly/deadlinerserver/internal/app/transport/kitex"
 	"github.com/aritxonly/deadlinerserver/internal/config"
 	domainAccount "github.com/aritxonly/deadlinerserver/internal/domain/account"
 	domainSync "github.com/aritxonly/deadlinerserver/internal/domain/sync"
@@ -15,14 +14,20 @@ import (
 	"github.com/aritxonly/deadlinerserver/internal/infra/repo"
 )
 
-func NewKitexHandler(cfg config.Config) (*transportkitex.Handler, error) {
-	db, err := persistencegorm.Open(cfg.Database.Driver, cfg.Database.DSN)
-	if err != nil {
-		return nil, err
-	}
+type Runtime struct {
+	AccountService   appaccount.Service
+	SyncDomain       domainSync.Service
+	AccessTokenCodec appauth.AccessTokenParser
+	DefaultPullLimit int32
+	MaxPullLimit     int32
+}
+
+func NewRuntime(cfg config.Config) (*Runtime, error) {
+	db := persistencegorm.MustInit(cfg.Database.Driver, cfg.Database.DSN)
 
 	accountRepo := repo.NewAccountRepo(db)
 	deadlineRepo := repo.NewDeadlineRepo(db)
+	habitRepo := repo.NewHabitRepo(db)
 	mutationReceiptRepo := repo.NewMutationReceiptRepo(db)
 	syncChangeRepo := repo.NewSyncChangeRepo(db)
 
@@ -43,15 +48,34 @@ func NewKitexHandler(cfg config.Config) (*transportkitex.Handler, error) {
 	syncDomainService := domainSync.NewService(
 		accountRepo,
 		deadlineRepo,
+		habitRepo,
 		mutationReceiptRepo,
 		syncChangeRepo,
 	)
-	syncAppService := appsync.NewService(
-		appauth.NewMetainfoAccountResolver(accessTokenCodec),
-		syncDomainService,
-		cfg.Sync.DefaultPullLimit,
-		cfg.Sync.MaxPullLimit,
-	)
 
-	return transportkitex.NewHandler(accountAppService, syncAppService), nil
+	return &Runtime{
+		AccountService:   accountAppService,
+		SyncDomain:       syncDomainService,
+		AccessTokenCodec: accessTokenCodec,
+		DefaultPullLimit: cfg.Sync.DefaultPullLimit,
+		MaxPullLimit:     cfg.Sync.MaxPullLimit,
+	}, nil
+}
+
+func (r *Runtime) NewKitexSyncService() appsync.Service {
+	return appsync.NewService(
+		appauth.NewMetainfoAccountResolver(r.AccessTokenCodec),
+		r.SyncDomain,
+		r.DefaultPullLimit,
+		r.MaxPullLimit,
+	)
+}
+
+func (r *Runtime) NewHTTPSyncService() appsync.Service {
+	return appsync.NewService(
+		appauth.NewContextAccountResolver(r.AccessTokenCodec),
+		r.SyncDomain,
+		r.DefaultPullLimit,
+		r.MaxPullLimit,
+	)
 }

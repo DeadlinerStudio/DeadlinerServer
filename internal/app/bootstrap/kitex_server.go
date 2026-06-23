@@ -1,9 +1,11 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
+	transportkitex "github.com/aritxonly/deadlinerserver/internal/app/transport/kitex"
 	"github.com/aritxonly/deadlinerserver/internal/config"
 	deadlinerv1 "github.com/aritxonly/deadlinerserver/kitex_gen/deadliner/v1/deadlinerservice"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
@@ -11,10 +13,9 @@ import (
 	"github.com/cloudwego/kitex/server"
 )
 
-func NewKitexServer(cfg config.Config) (server.Server, error) {
-	handler, err := NewKitexHandler(cfg)
-	if err != nil {
-		return nil, err
+func NewKitexServer(cfg config.Config, runtime *Runtime) (server.Server, error) {
+	if runtime == nil {
+		return nil, errors.New("runtime is required")
 	}
 
 	addr, err := net.ResolveTCPAddr("tcp", cfg.Service.Address)
@@ -23,11 +24,12 @@ func NewKitexServer(cfg config.Config) (server.Server, error) {
 	}
 
 	return deadlinerv1.NewServer(
-		handler,
+		transportkitex.NewHandler(runtime.AccountService, runtime.NewKitexSyncService()),
 		server.WithServiceAddr(addr),
 		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{
 			ServiceName: cfg.Service.Name,
 		}),
+		server.WithMiddleware(transportkitex.AccessLogMiddleware()),
 		server.WithMetaHandler(transmeta.MetainfoServerHandler),
 	), nil
 }

@@ -2722,20 +2722,6 @@ func (p *HabitConfig) FastRead(buf []byte) (int, error) {
 					goto SkipFieldError
 				}
 			}
-		case 3:
-			if fieldTypeId == thrift.I32 {
-				l, err = p.FastReadField3(buf[offset:])
-				offset += l
-				if err != nil {
-					goto ReadFieldError
-				}
-			} else {
-				l, err = thrift.Binary.Skip(buf[offset:], fieldTypeId)
-				offset += l
-				if err != nil {
-					goto SkipFieldError
-				}
-			}
 		case 4:
 			if fieldTypeId == thrift.STRING {
 				l, err = p.FastReadField4(buf[offset:])
@@ -2922,20 +2908,6 @@ func (p *HabitConfig) FastReadField2(buf []byte) (int, error) {
 	return offset, nil
 }
 
-func (p *HabitConfig) FastReadField3(buf []byte) (int, error) {
-	offset := 0
-
-	var _field int32
-	if v, l, err := thrift.Binary.ReadI32(buf[offset:]); err != nil {
-		return offset, err
-	} else {
-		offset += l
-		_field = v
-	}
-	p.Color = _field
-	return offset, nil
-}
-
 func (p *HabitConfig) FastReadField4(buf []byte) (int, error) {
 	offset := 0
 
@@ -3083,7 +3055,6 @@ func (p *HabitConfig) FastWrite(buf []byte) int {
 func (p *HabitConfig) FastWriteNocopy(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	if p != nil {
-		offset += p.fastWriteField3(buf[offset:], w)
 		offset += p.fastWriteField6(buf[offset:], w)
 		offset += p.fastWriteField8(buf[offset:], w)
 		offset += p.fastWriteField12(buf[offset:], w)
@@ -3106,7 +3077,6 @@ func (p *HabitConfig) BLength() int {
 	if p != nil {
 		l += p.field1Length()
 		l += p.field2Length()
-		l += p.field3Length()
 		l += p.field4Length()
 		l += p.field5Length()
 		l += p.field6Length()
@@ -3133,13 +3103,6 @@ func (p *HabitConfig) fastWriteField2(buf []byte, w thrift.NocopyWriter) int {
 	offset := 0
 	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.STRING, 2)
 	offset += thrift.Binary.WriteStringNocopy(buf[offset:], w, p.Description)
-	return offset
-}
-
-func (p *HabitConfig) fastWriteField3(buf []byte, w thrift.NocopyWriter) int {
-	offset := 0
-	offset += thrift.Binary.WriteFieldBegin(buf[offset:], thrift.I32, 3)
-	offset += thrift.Binary.WriteI32(buf[offset:], p.Color)
 	return offset
 }
 
@@ -3224,13 +3187,6 @@ func (p *HabitConfig) field2Length() int {
 	l := 0
 	l += thrift.Binary.FieldBeginLength()
 	l += thrift.Binary.StringLengthNocopy(p.Description)
-	return l
-}
-
-func (p *HabitConfig) field3Length() int {
-	l := 0
-	l += thrift.Binary.FieldBeginLength()
-	l += thrift.Binary.I32Length()
 	return l
 }
 

@@ -161,7 +161,6 @@ func toDomainHabitDocument(doc *v1.HabitDocument) domainSync.HabitDocument {
 		habitConfig = domainSync.HabitConfig{
 			Name:           doc.Habit.GetName(),
 			Description:    doc.Habit.GetDescription(),
-			Color:          doc.Habit.GetColor(),
 			IconKey:        doc.Habit.GetIconKey(),
 			Period:         domainSync.HabitPeriod(doc.Habit.GetPeriod()),
 			TimesPerPeriod: doc.Habit.GetTimesPerPeriod(),

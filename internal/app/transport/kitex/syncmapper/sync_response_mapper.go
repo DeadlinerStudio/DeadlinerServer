@@ -132,7 +132,6 @@ func toKitexHabitDocument(doc domainSync.HabitDocument) *v1.HabitDocument {
 		Habit: &v1.HabitConfig{
 			Name:           doc.Habit.Name,
 			Description:    doc.Habit.Description,
-			Color:          doc.Habit.Color,
 			IconKey:        doc.Habit.IconKey,
 			Period:         string(doc.Habit.Period),
 			TimesPerPeriod: doc.Habit.TimesPerPeriod,

@@ -11,8 +11,9 @@ type Service = servicepkg.Service
 func NewService(
 	accountRepo account.Repository,
 	deadlineRepo portpkg.DeadlineRepository,
+	habitRepo portpkg.HabitRepository,
 	mutationReceiptRepo portpkg.MutationReceiptRepository,
 	syncChangeRepo portpkg.SyncChangeRepository,
 ) Service {
-	return servicepkg.NewService(accountRepo, deadlineRepo, mutationReceiptRepo, syncChangeRepo)
+	return servicepkg.NewService(accountRepo, deadlineRepo, habitRepo, mutationReceiptRepo, syncChangeRepo)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/aritxonly/deadlinerserver/internal/domain/account"
@@ -15,6 +16,7 @@ import (
 type syncService struct {
 	accountRepo         account.Repository
 	deadlineRepo        portpkg.DeadlineRepository
+	habitRepo           portpkg.HabitRepository
 	mutationReceiptRepo portpkg.MutationReceiptRepository
 	syncChangeRepo      portpkg.SyncChangeRepository
 }
@@ -22,12 +24,14 @@ type syncService struct {
 func NewService(
 	accountRepo account.Repository,
 	deadlineRepo portpkg.DeadlineRepository,
+	habitRepo portpkg.HabitRepository,
 	mutationReceiptRepo portpkg.MutationReceiptRepository,
 	syncChangeRepo portpkg.SyncChangeRepository,
 ) Service {
 	return &syncService{
 		accountRepo:         accountRepo,
 		deadlineRepo:        deadlineRepo,
+		habitRepo:           habitRepo,
 		mutationReceiptRepo: mutationReceiptRepo,
 		syncChangeRepo:      syncChangeRepo,
 	}
@@ -63,23 +67,37 @@ func (s *syncService) PullChanges(
 		return nil, err
 	}
 
+	habitChanges, err := s.habitRepo.ListAfterChangeID(
+		ctx,
+		acc.ID,
+		afterChangeID,
+		queryLimit,
+		cmd.IncludeDelete,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	ordered := mergeOrderedChanges(deadlineChanges, habitChanges)
 	hasMore := false
-	if limit > 0 && len(deadlineChanges) > limit {
+	if limit > 0 && len(ordered) > limit {
 		hasMore = true
-		deadlineChanges = deadlineChanges[:limit]
+		ordered = ordered[:limit]
 	}
 
 	nextCursor := cmd.Cursor
-	if len(deadlineChanges) > 0 {
-		lastChangeID := deadlineChanges[len(deadlineChanges)-1].ServerVersion.ChangeID
+	if len(ordered) > 0 {
+		lastChangeID := ordered[len(ordered)-1].changeID
 		if lastChangeID > 0 {
 			nextCursor = strconv.FormatInt(lastChangeID, 10)
 		}
 	}
 
+	selectedDeadlineChanges, selectedHabitChanges := splitOrderedChanges(ordered)
+
 	return &commandpkg.PullChangesResult{
-		DeadlineChanges: deadlineChanges,
-		HabitChanges:    []statepkg.HabitChange{},
+		DeadlineChanges: selectedDeadlineChanges,
+		HabitChanges:    selectedHabitChanges,
 		NextCursor:      nextCursor,
 		HasMore:         hasMore,
 	}, nil
@@ -100,14 +118,14 @@ func (s *syncService) PushChanges(
 	result := &commandpkg.PushChangesResult{
 		Results:         make([]commandpkg.MutationResult, 0, len(cmd.Mutations)),
 		DeadlineChanges: make([]statepkg.DeadlineChange, 0, len(cmd.Mutations)),
-		HabitChanges:    []statepkg.HabitChange{},
+		HabitChanges:    make([]statepkg.HabitChange, 0, len(cmd.Mutations)),
 		NextCursor:      cmd.BaseCursor,
 	}
 
 	maxCursor := parseCursor(cmd.BaseCursor)
 
 	for _, mutation := range cmd.Mutations {
-		mutationResult, deadlineChange, err := s.handleMutation(ctx, acc, cmd.DeviceUID, mutation)
+		mutationResult, deadlineChange, habitChange, err := s.handleMutation(ctx, acc, cmd.DeviceUID, mutation)
 		if err != nil {
 			return nil, err
 		}
@@ -117,6 +135,11 @@ func (s *syncService) PushChanges(
 			result.DeadlineChanges = append(result.DeadlineChanges, *deadlineChange)
 			if deadlineChange.ServerVersion.ChangeID > maxCursor {
 				maxCursor = deadlineChange.ServerVersion.ChangeID
+			}
+		} else if habitChange != nil {
+			result.HabitChanges = append(result.HabitChanges, *habitChange)
+			if habitChange.ServerVersion.ChangeID > maxCursor {
+				maxCursor = habitChange.ServerVersion.ChangeID
 			}
 		} else if mutationResult.ServerVersion.ChangeID > maxCursor {
 			maxCursor = mutationResult.ServerVersion.ChangeID
@@ -135,20 +158,20 @@ func (s *syncService) handleMutation(
 	acc *account.Account,
 	deviceUID string,
 	mutation commandpkg.Mutation,
-) (commandpkg.MutationResult, *statepkg.DeadlineChange, error) {
+) (commandpkg.MutationResult, *statepkg.DeadlineChange, *statepkg.HabitChange, error) {
 	if mutation.DeviceUID != "" && mutation.DeviceUID != deviceUID {
-		return rejectedMutationResult(mutation, "device uid mismatch"), nil, nil
+		return rejectedMutationResult(mutation, "device uid mismatch"), nil, nil, nil
 	}
-	if mutation.Habit != nil {
-		return rejectedMutationResult(mutation, "habit mutation is not implemented yet"), nil, nil
+	if mutation.Deadline == nil && mutation.Habit == nil {
+		return rejectedMutationResult(mutation, "mutation payload is required"), nil, nil, nil
 	}
-	if mutation.Deadline == nil {
-		return rejectedMutationResult(mutation, "deadline mutation payload is required"), nil, nil
+	if mutation.Deadline != nil && mutation.Habit != nil {
+		return rejectedMutationResult(mutation, "only one mutation payload variant is allowed"), nil, nil, nil
 	}
 
 	receipt, err := s.mutationReceiptRepo.Find(ctx, acc.ID, deviceUID, mutation.MutationID)
 	if err != nil {
-		return commandpkg.MutationResult{}, nil, err
+		return commandpkg.MutationResult{}, nil, nil, err
 	}
 	if receipt != nil {
 		replayed := decodeMutationResult(receipt.ResultPayload)
@@ -156,32 +179,49 @@ func (s *syncService) handleMutation(
 		if replayed.Status == "" {
 			replayed.Status = commandpkg.MutationStatusReplayed
 		}
-		var change *statepkg.DeadlineChange
+		var deadlineChange *statepkg.DeadlineChange
+		var habitChange *statepkg.HabitChange
 		if replayed.ServerVersion.ChangeID > 0 {
-			change, err = s.deadlineRepo.FindByUID(ctx, acc.ID, mutation.EntityUID)
+			if mutation.Deadline != nil {
+				deadlineChange, err = s.deadlineRepo.FindByUID(ctx, acc.ID, mutation.EntityUID)
+			} else {
+				habitChange, err = s.habitRepo.FindByDDLUID(ctx, acc.ID, mutation.EntityUID)
+			}
 			if err != nil {
-				return commandpkg.MutationResult{}, nil, err
+				return commandpkg.MutationResult{}, nil, nil, err
 			}
 		}
-		return replayed, change, nil
+		return replayed, deadlineChange, habitChange, nil
 	}
 
+	if mutation.Deadline != nil {
+		return s.handleDeadlineMutation(ctx, acc, deviceUID, mutation)
+	}
+	return s.handleHabitMutation(ctx, acc, deviceUID, mutation)
+}
+
+func (s *syncService) handleDeadlineMutation(
+	ctx context.Context,
+	acc *account.Account,
+	deviceUID string,
+	mutation commandpkg.Mutation,
+) (commandpkg.MutationResult, *statepkg.DeadlineChange, *statepkg.HabitChange, error) {
 	current, err := s.deadlineRepo.FindByUID(ctx, acc.ID, mutation.EntityUID)
 	if err != nil {
-		return commandpkg.MutationResult{}, nil, err
+		return commandpkg.MutationResult{}, nil, nil, err
 	}
 
-	if isDeadlineConflict(current, mutation.BaseChangeID) {
+	if isEntityConflict(currentVersion(current), mutation.BaseChangeID) {
 		conflict := conflictMutationResult(mutation, current)
-		if err := s.saveReceipt(ctx, acc.ID, deviceUID, mutation, conflict); err != nil {
-			return commandpkg.MutationResult{}, nil, err
+		if err := s.saveReceipt(ctx, acc.ID, deviceUID, mutation, "deadline", conflict); err != nil {
+			return commandpkg.MutationResult{}, nil, nil, err
 		}
-		return conflict, current, nil
+		return conflict, current, nil, nil
 	}
 
 	payload, err := json.Marshal(mutation.Deadline)
 	if err != nil {
-		return commandpkg.MutationResult{}, nil, err
+		return commandpkg.MutationResult{}, nil, nil, err
 	}
 
 	change, err := s.syncChangeRepo.Append(ctx, portpkg.AppendSyncChangeParams{
@@ -190,11 +230,11 @@ func (s *syncService) handleMutation(
 		MutationID: mutation.MutationID,
 		EntityKind: "deadline",
 		EntityUID:  mutation.EntityUID,
-		Action:     deadlineAction(mutation.Deadline.Deleted),
+		Action:     entityAction(mutation.Deadline.Deleted),
 		Payload:    payload,
 	})
 	if err != nil {
-		return commandpkg.MutationResult{}, nil, err
+		return commandpkg.MutationResult{}, nil, nil, err
 	}
 
 	serverVersion := statepkg.ServerVersion{
@@ -209,12 +249,12 @@ func (s *syncService) handleMutation(
 		ClientVersion:      &mutation.ClientVersion,
 		UpdatedByDeviceUID: deviceUID,
 	}); err != nil {
-		return commandpkg.MutationResult{}, nil, err
+		return commandpkg.MutationResult{}, nil, nil, err
 	}
 
 	savedChange, err := s.deadlineRepo.FindByUID(ctx, acc.ID, mutation.EntityUID)
 	if err != nil {
-		return commandpkg.MutationResult{}, nil, err
+		return commandpkg.MutationResult{}, nil, nil, err
 	}
 
 	applied := commandpkg.MutationResult{
@@ -224,11 +264,82 @@ func (s *syncService) handleMutation(
 		ServerVersion: serverVersion,
 		Status:        commandpkg.MutationStatusApplied,
 	}
-	if err := s.saveReceipt(ctx, acc.ID, deviceUID, mutation, applied); err != nil {
-		return commandpkg.MutationResult{}, nil, err
+	if err := s.saveReceipt(ctx, acc.ID, deviceUID, mutation, "deadline", applied); err != nil {
+		return commandpkg.MutationResult{}, nil, nil, err
 	}
 
-	return applied, savedChange, nil
+	return applied, savedChange, nil, nil
+}
+
+func (s *syncService) handleHabitMutation(
+	ctx context.Context,
+	acc *account.Account,
+	deviceUID string,
+	mutation commandpkg.Mutation,
+) (commandpkg.MutationResult, *statepkg.DeadlineChange, *statepkg.HabitChange, error) {
+	current, err := s.habitRepo.FindByDDLUID(ctx, acc.ID, mutation.EntityUID)
+	if err != nil {
+		return commandpkg.MutationResult{}, nil, nil, err
+	}
+
+	if isEntityConflict(currentVersion(current), mutation.BaseChangeID) {
+		conflict := conflictMutationResult(mutation, current)
+		if err := s.saveReceipt(ctx, acc.ID, deviceUID, mutation, "habit", conflict); err != nil {
+			return commandpkg.MutationResult{}, nil, nil, err
+		}
+		return conflict, nil, current, nil
+	}
+
+	payload, err := json.Marshal(mutation.Habit)
+	if err != nil {
+		return commandpkg.MutationResult{}, nil, nil, err
+	}
+
+	change, err := s.syncChangeRepo.Append(ctx, portpkg.AppendSyncChangeParams{
+		AccountID:  acc.ID,
+		DeviceUID:  deviceUID,
+		MutationID: mutation.MutationID,
+		EntityKind: "habit",
+		EntityUID:  mutation.EntityUID,
+		Action:     entityAction(mutation.Habit.Deleted),
+		Payload:    payload,
+	})
+	if err != nil {
+		return commandpkg.MutationResult{}, nil, nil, err
+	}
+
+	serverVersion := statepkg.ServerVersion{
+		ChangeID:    change.ChangeID,
+		CommittedAt: change.CommittedAt,
+	}
+	if err := s.habitRepo.Save(ctx, portpkg.SaveHabitParams{
+		AccountID:          acc.ID,
+		Deleted:            mutation.Habit.Deleted,
+		Document:           mutation.Habit.Document,
+		ServerVersion:      serverVersion,
+		ClientVersion:      &mutation.ClientVersion,
+		UpdatedByDeviceUID: deviceUID,
+	}); err != nil {
+		return commandpkg.MutationResult{}, nil, nil, err
+	}
+
+	savedChange, err := s.habitRepo.FindByDDLUID(ctx, acc.ID, mutation.EntityUID)
+	if err != nil {
+		return commandpkg.MutationResult{}, nil, nil, err
+	}
+
+	applied := commandpkg.MutationResult{
+		MutationID:    mutation.MutationID,
+		EntityUID:     mutation.EntityUID,
+		Accepted:      true,
+		ServerVersion: serverVersion,
+		Status:        commandpkg.MutationStatusApplied,
+	}
+	if err := s.saveReceipt(ctx, acc.ID, deviceUID, mutation, "habit", applied); err != nil {
+		return commandpkg.MutationResult{}, nil, nil, err
+	}
+
+	return applied, nil, savedChange, nil
 }
 
 func (s *syncService) saveReceipt(
@@ -236,6 +347,7 @@ func (s *syncService) saveReceipt(
 	accountID int64,
 	deviceUID string,
 	mutation commandpkg.Mutation,
+	entityKind string,
 	result commandpkg.MutationResult,
 ) error {
 	payload, err := json.Marshal(result)
@@ -247,7 +359,7 @@ func (s *syncService) saveReceipt(
 		AccountID:      accountID,
 		DeviceUID:      deviceUID,
 		MutationID:     mutation.MutationID,
-		EntityKind:     "deadline",
+		EntityKind:     entityKind,
 		EntityUID:      mutation.EntityUID,
 		Status:         result.Status,
 		Replayed:       result.Replayed,
@@ -266,10 +378,7 @@ func rejectedMutationResult(mutation commandpkg.Mutation, reason string) command
 	}
 }
 
-func conflictMutationResult(
-	mutation commandpkg.Mutation,
-	current *statepkg.DeadlineChange,
-) commandpkg.MutationResult {
+func conflictMutationResult(mutation commandpkg.Mutation, current any) commandpkg.MutationResult {
 	result := commandpkg.MutationResult{
 		MutationID:      mutation.MutationID,
 		EntityUID:       mutation.EntityUID,
@@ -278,7 +387,7 @@ func conflictMutationResult(
 		Status:          commandpkg.MutationStatusConflict,
 	}
 	if current != nil {
-		result.ServerVersion = current.ServerVersion
+		result.ServerVersion = currentVersion(current)
 	}
 	return result
 }
@@ -292,24 +401,80 @@ func decodeMutationResult(payload []byte) commandpkg.MutationResult {
 	return result
 }
 
-func isDeadlineConflict(current *statepkg.DeadlineChange, baseChangeID int64) bool {
+func isEntityConflict(currentVersion statepkg.ServerVersion, baseChangeID int64) bool {
 	switch {
-	case current == nil && baseChangeID == 0:
+	case currentVersion.ChangeID == 0 && baseChangeID == 0:
 		return false
-	case current == nil && baseChangeID > 0:
+	case currentVersion.ChangeID == 0 && baseChangeID > 0:
 		return true
-	case current != nil && baseChangeID == 0:
-		return current.ServerVersion.ChangeID > 0
+	case currentVersion.ChangeID > 0 && baseChangeID == 0:
+		return true
 	default:
-		return current.ServerVersion.ChangeID != baseChangeID
+		return currentVersion.ChangeID != baseChangeID
 	}
 }
 
-func deadlineAction(deleted bool) string {
+func entityAction(deleted bool) string {
 	if deleted {
 		return "delete"
 	}
 	return "upsert"
+}
+
+type orderedChange struct {
+	changeID int64
+	deadline *statepkg.DeadlineChange
+	habit    *statepkg.HabitChange
+}
+
+func mergeOrderedChanges(deadlineChanges []statepkg.DeadlineChange, habitChanges []statepkg.HabitChange) []orderedChange {
+	ordered := make([]orderedChange, 0, len(deadlineChanges)+len(habitChanges))
+	for i := range deadlineChanges {
+		change := deadlineChanges[i]
+		ordered = append(ordered, orderedChange{
+			changeID: change.ServerVersion.ChangeID,
+			deadline: &change,
+		})
+	}
+	for i := range habitChanges {
+		change := habitChanges[i]
+		ordered = append(ordered, orderedChange{
+			changeID: change.ServerVersion.ChangeID,
+			habit:    &change,
+		})
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		return ordered[i].changeID < ordered[j].changeID
+	})
+	return ordered
+}
+
+func splitOrderedChanges(ordered []orderedChange) ([]statepkg.DeadlineChange, []statepkg.HabitChange) {
+	deadlineChanges := make([]statepkg.DeadlineChange, 0, len(ordered))
+	habitChanges := make([]statepkg.HabitChange, 0, len(ordered))
+	for _, change := range ordered {
+		if change.deadline != nil {
+			deadlineChanges = append(deadlineChanges, *change.deadline)
+		}
+		if change.habit != nil {
+			habitChanges = append(habitChanges, *change.habit)
+		}
+	}
+	return deadlineChanges, habitChanges
+}
+
+func currentVersion(change any) statepkg.ServerVersion {
+	switch typed := change.(type) {
+	case *statepkg.DeadlineChange:
+		if typed != nil {
+			return typed.ServerVersion
+		}
+	case *statepkg.HabitChange:
+		if typed != nil {
+			return typed.ServerVersion
+		}
+	}
+	return statepkg.ServerVersion{}
 }
 
 func parseCursor(cursor string) int64 {

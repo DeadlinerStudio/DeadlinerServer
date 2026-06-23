@@ -1,0 +1,42 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: deadliner
+      MYSQL_USER: deadliner
+      MYSQL_PASSWORD: deadliner
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  deadliner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DEADLINER_SECRET_CONFIG: /app/conf/secret.docker.json
+    volumes:
+      - ./conf/config.json:/app/conf/config.json:ro
+      - ./conf/secret.docker.json:/app/conf/secret.docker.json:ro
+    ports:
+      - "8080:8080"
+      - "8888:8888"
+
+volumes:
+  mysql-data:
