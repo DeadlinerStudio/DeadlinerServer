@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"time"
 
+	appadmin "github.com/aritxonly/deadlinerserver/internal/app/adminconfig"
 	appauth "github.com/aritxonly/deadlinerserver/internal/app/auth"
 	appaccount "github.com/aritxonly/deadlinerserver/internal/app/service/account"
 	appsync "github.com/aritxonly/deadlinerserver/internal/app/service/sync"
@@ -15,11 +16,13 @@ import (
 )
 
 type Runtime struct {
-	AccountService   appaccount.Service
-	SyncDomain       domainSync.Service
-	AccessTokenCodec appauth.AccessTokenParser
-	DefaultPullLimit int32
-	MaxPullLimit     int32
+	AccountService     appaccount.Service
+	AdminConfigService appadmin.Service
+	SyncDomain         domainSync.Service
+	AccessTokenCodec   appauth.AccessTokenParser
+	DefaultPullLimit   int32
+	MaxPullLimit       int32
+	AdminRuntimeConfig config.AdminConfig
 }
 
 func NewRuntime(cfg config.Config) (*Runtime, error) {
@@ -54,11 +57,13 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	)
 
 	return &Runtime{
-		AccountService:   accountAppService,
-		SyncDomain:       syncDomainService,
-		AccessTokenCodec: accessTokenCodec,
-		DefaultPullLimit: cfg.Sync.DefaultPullLimit,
-		MaxPullLimit:     cfg.Sync.MaxPullLimit,
+		AccountService:     accountAppService,
+		AdminConfigService: appadmin.NewService(config.DefaultPath, config.ResolveSecretPath()),
+		SyncDomain:         syncDomainService,
+		AccessTokenCodec:   accessTokenCodec,
+		DefaultPullLimit:   cfg.Sync.DefaultPullLimit,
+		MaxPullLimit:       cfg.Sync.MaxPullLimit,
+		AdminRuntimeConfig: cfg.Admin,
 	}, nil
 }
 

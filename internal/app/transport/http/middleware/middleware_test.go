@@ -148,7 +148,14 @@ func newConfiguredTestServer(
 		httpmiddleware.EnforceMaxBodyBytes(httpConfig.MaxRequestBodyBytes),
 		httpmiddleware.LimitByClientIP("http", httpConfig.RateLimitPerMinute, httpConfig.RateLimitBurst),
 	)
-	handler := transporthttp.NewHandler(accountService, syncService, parser, httpConfig)
+	handler := transporthttp.NewHandler(
+		accountService,
+		syncService,
+		nil,
+		parser,
+		httpConfig,
+		config.AdminConfig{},
+	)
 	handler.RegisterRoutes(engine)
 	return engine
 }

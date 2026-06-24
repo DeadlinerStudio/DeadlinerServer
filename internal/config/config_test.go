@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -75,6 +76,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Sync.DefaultPullLimit == 0 || cfg.Sync.MaxPullLimit == 0 {
 		t.Fatal("expected sync defaults")
 	}
+	if cfg.Admin.BasePath == "" {
+		t.Fatal("expected admin base path default")
+	}
 }
 
 func TestLoadRejectsMissingSensitiveConfig(t *testing.T) {
@@ -92,5 +96,32 @@ func TestLoadRejectsMissingSensitiveConfig(t *testing.T) {
 	_, err := LoadWithSecretPath(path, filepath.Join(dir, "missing-secret.json"))
 	if err == nil {
 		t.Fatal("expected missing sensitive config error")
+	}
+}
+
+func TestSavePublicOmitsSensitiveFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	cfg := Default()
+	cfg.Auth.AccessTokenSecret = "secret-value"
+	cfg.Database.DSN = "dsn-value"
+	cfg.Admin.Enabled = true
+	cfg.Admin.AuthToken = "admin-secret"
+
+	if err := SavePublic(path, cfg); err != nil {
+		t.Fatalf("SavePublic failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+
+	text := string(content)
+	for _, secret := range []string{"secret-value", "dsn-value", "admin-secret"} {
+		if strings.Contains(text, secret) {
+			t.Fatalf("public config leaked secret %q", secret)
+		}
 	}
 }

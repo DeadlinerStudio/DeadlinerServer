@@ -33,8 +33,10 @@ func NewHertzServer(cfg config.Config, runtime *Runtime) (*hertzserver.Hertz, er
 	handler := transporthttp.NewHandler(
 		runtime.AccountService,
 		runtime.NewHTTPSyncService(),
+		runtime.AdminConfigService,
 		runtime.AccessTokenCodec,
 		cfg.HTTP,
+		runtime.AdminRuntimeConfig,
 	)
 	handler.RegisterRoutes(server)
 	return server, nil

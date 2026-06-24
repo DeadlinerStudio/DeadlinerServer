@@ -122,7 +122,7 @@ HTTP API documentation now lives in:
 
 - [docs/api/openapi.yaml](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/api/openapi.yaml)
 
-The OpenAPI document currently covers health, auth, and sync endpoints.
+The OpenAPI document currently covers health, auth, sync, and config admin endpoints.
 
 ## HTTP Security
 
@@ -135,6 +135,17 @@ The Hertz server now enables a small default security middleware chain:
 - request body size limits
 - in-memory per-client rate limits
 - conservative security headers for API responses
+
+## Config Admin
+
+A first simple config backend is now available when enabled in config:
+
+- page: `/admin/config`
+- JSON API: `/admin/api/config`
+
+The config backend only edits non-sensitive runtime config stored in
+`conf/config.json`. Secret values remain in `conf/secret.json`, and updates
+require a server restart to take effect.
 
 ## Docker
 

@@ -13,53 +13,61 @@ const DefaultSecretPath = "conf/secret.json"
 const SecretPathEnv = "DEADLINER_SECRET_CONFIG"
 
 type Config struct {
-	Service  ServiceConfig
-	HTTP     HTTPConfig
-	Auth     AuthConfig
-	Database DatabaseConfig
-	Sync     SyncConfig
+	Service  ServiceConfig  `json:"service"`
+	HTTP     HTTPConfig     `json:"http"`
+	Auth     AuthConfig     `json:"auth"`
+	Database DatabaseConfig `json:"database"`
+	Sync     SyncConfig     `json:"sync"`
+	Admin    AdminConfig    `json:"admin"`
 }
 
 type ServiceConfig struct {
-	Name    string
-	Address string
+	Name    string `json:"name"`
+	Address string `json:"address"`
 }
 
 type HTTPConfig struct {
-	Address                string
-	ReadTimeoutSeconds     int
-	WriteTimeoutSeconds    int
-	IdleTimeoutSeconds     int
-	MaxRequestBodyBytes    int
-	RateLimitPerMinute     int
-	RateLimitBurst         int
-	AuthRateLimitPerMinute int
-	AuthRateLimitBurst     int
-	SyncRateLimitPerMinute int
-	SyncRateLimitBurst     int
+	Address                string `json:"address"`
+	ReadTimeoutSeconds     int    `json:"readTimeoutSeconds"`
+	WriteTimeoutSeconds    int    `json:"writeTimeoutSeconds"`
+	IdleTimeoutSeconds     int    `json:"idleTimeoutSeconds"`
+	MaxRequestBodyBytes    int    `json:"maxRequestBodyBytes"`
+	RateLimitPerMinute     int    `json:"rateLimitPerMinute"`
+	RateLimitBurst         int    `json:"rateLimitBurst"`
+	AuthRateLimitPerMinute int    `json:"authRateLimitPerMinute"`
+	AuthRateLimitBurst     int    `json:"authRateLimitBurst"`
+	SyncRateLimitPerMinute int    `json:"syncRateLimitPerMinute"`
+	SyncRateLimitBurst     int    `json:"syncRateLimitBurst"`
 }
 
 type DatabaseConfig struct {
-	Driver string
-	DSN    string
+	Driver string `json:"driver"`
+	DSN    string `json:"dsn,omitempty"`
 }
 
 type AuthConfig struct {
-	AccessTokenSecret     string
-	AccessTokenTTLMinutes int32
-	RefreshTokenTTLHours  int32
-	PasswordHashCost      int
-	RandomTokenBytes      int
+	AccessTokenSecret     string `json:"accessTokenSecret,omitempty"`
+	AccessTokenTTLMinutes int32  `json:"accessTokenTTLMinutes"`
+	RefreshTokenTTLHours  int32  `json:"refreshTokenTTLHours"`
+	PasswordHashCost      int    `json:"passwordHashCost"`
+	RandomTokenBytes      int    `json:"randomTokenBytes"`
 }
 
 type SyncConfig struct {
-	DefaultPullLimit int32
-	MaxPullLimit     int32
+	DefaultPullLimit int32 `json:"defaultPullLimit"`
+	MaxPullLimit     int32 `json:"maxPullLimit"`
+}
+
+type AdminConfig struct {
+	Enabled   bool   `json:"enabled"`
+	BasePath  string `json:"basePath"`
+	AuthToken string `json:"-"`
 }
 
 type secretConfig struct {
 	Auth     secretAuthConfig     `json:"auth"`
 	Database secretDatabaseConfig `json:"database"`
+	Admin    secretAdminConfig    `json:"admin"`
 }
 
 type secretAuthConfig struct {
@@ -68,6 +76,10 @@ type secretAuthConfig struct {
 
 type secretDatabaseConfig struct {
 	DSN string `json:"dsn"`
+}
+
+type secretAdminConfig struct {
+	AuthToken string `json:"authToken"`
 }
 
 func Default() Config {
@@ -101,6 +113,10 @@ func Default() Config {
 		Sync: SyncConfig{
 			DefaultPullLimit: 100,
 			MaxPullLimit:     500,
+		},
+		Admin: AdminConfig{
+			Enabled:  false,
+			BasePath: "/admin",
 		},
 	}
 }
@@ -168,13 +184,42 @@ func (c *Config) ApplyDefaults() {
 	if c.Sync.MaxPullLimit == 0 {
 		c.Sync.MaxPullLimit = defaults.Sync.MaxPullLimit
 	}
+	if c.Admin.BasePath == "" {
+		c.Admin.BasePath = defaults.Admin.BasePath
+	}
 }
 
 func Load(path string) (Config, error) {
 	return LoadWithSecretPath(path, ResolveSecretPath())
 }
 
+func LoadPublic(path string) (Config, error) {
+	if path == "" {
+		path = DefaultPath
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("read config %s: %w", path, err)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return Config{}, fmt.Errorf("decode config %s: %w", path, err)
+	}
+
+	cfg.ApplyDefaults()
+	if err := cfg.ValidatePublic(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
 func LoadWithSecretPath(path string, secretPath string) (Config, error) {
+	return load(path, secretPath)
+}
+
+func load(path string, secretPath string) (Config, error) {
 	if path == "" {
 		path = DefaultPath
 	}
@@ -234,11 +279,43 @@ func mergeSecretConfig(cfg *Config, path string) error {
 	if secret.Database.DSN != "" {
 		cfg.Database.DSN = secret.Database.DSN
 	}
+	if secret.Admin.AuthToken != "" {
+		cfg.Admin.AuthToken = secret.Admin.AuthToken
+	}
 
 	return nil
 }
 
+func SavePublic(path string, cfg Config) error {
+	if path == "" {
+		path = DefaultPath
+	}
+
+	cfg.ApplyDefaults()
+	cfg.Auth.AccessTokenSecret = ""
+	cfg.Database.DSN = ""
+	cfg.Admin.AuthToken = ""
+	if err := cfg.ValidatePublic(); err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode public config %s: %w", path, err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write public config %s: %w", path, err)
+	}
+	return nil
+}
+
 func (c Config) Validate() error {
+	if err := c.ValidatePublic(); err != nil {
+		return err
+	}
+
 	var missing []string
 
 	if strings.TrimSpace(c.Auth.AccessTokenSecret) == "" {
@@ -246,6 +323,9 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.Database.DSN) == "" {
 		missing = append(missing, "database.dsn")
+	}
+	if c.Admin.Enabled && strings.TrimSpace(c.Admin.AuthToken) == "" {
+		missing = append(missing, "admin.authToken")
 	}
 
 	if len(missing) > 0 {
@@ -257,5 +337,33 @@ func (c Config) Validate() error {
 		)
 	}
 
+	return nil
+}
+
+func (c Config) ValidatePublic() error {
+	if c.HTTP.ReadTimeoutSeconds <= 0 || c.HTTP.WriteTimeoutSeconds <= 0 || c.HTTP.IdleTimeoutSeconds <= 0 {
+		return errors.New("invalid config: http timeouts must be positive")
+	}
+	if c.HTTP.MaxRequestBodyBytes <= 0 {
+		return errors.New("invalid config: http.maxRequestBodyBytes must be positive")
+	}
+	if c.HTTP.RateLimitPerMinute <= 0 || c.HTTP.RateLimitBurst <= 0 {
+		return errors.New("invalid config: http rate limits must be positive")
+	}
+	if c.HTTP.AuthRateLimitPerMinute <= 0 || c.HTTP.AuthRateLimitBurst <= 0 {
+		return errors.New("invalid config: auth rate limits must be positive")
+	}
+	if c.HTTP.SyncRateLimitPerMinute <= 0 || c.HTTP.SyncRateLimitBurst <= 0 {
+		return errors.New("invalid config: sync rate limits must be positive")
+	}
+	if c.Sync.DefaultPullLimit <= 0 || c.Sync.MaxPullLimit <= 0 {
+		return errors.New("invalid config: sync pull limits must be positive")
+	}
+	if c.Sync.DefaultPullLimit > c.Sync.MaxPullLimit {
+		return errors.New("invalid config: sync.defaultPullLimit must not exceed sync.maxPullLimit")
+	}
+	if c.Admin.Enabled && !strings.HasPrefix(c.Admin.BasePath, "/") {
+		return errors.New("invalid config: admin.basePath must start with '/'")
+	}
 	return nil
 }

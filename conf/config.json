@@ -28,5 +28,9 @@
   "sync": {
     "defaultPullLimit": 100,
     "maxPullLimit": 500
+  },
+  "admin": {
+    "enabled": false,
+    "basePath": "/admin"
   }
 }

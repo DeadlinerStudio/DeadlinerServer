@@ -14,6 +14,7 @@ tags:
   - name: Health
   - name: Auth
   - name: Sync
+  - name: Admin
 paths:
   /healthz:
     get:
@@ -236,6 +237,77 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /admin/config:
+    get:
+      tags: [Admin]
+      summary: Serve the config admin page
+      operationId: adminConfigPage
+      responses:
+        '200':
+          description: HTML admin page
+          content:
+            text/html:
+              schema:
+                type: string
+  /admin/api/config:
+    get:
+      tags: [Admin]
+      summary: Get current non-sensitive config snapshot
+      operationId: getAdminConfig
+      security:
+        - AdminBearerAuth: []
+      responses:
+        '200':
+          description: Config snapshot loaded
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminConfigSnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Admin backend is disabled or not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [Admin]
+      summary: Persist non-sensitive config updates to conf/config.json
+      operationId: updateAdminConfig
+      security:
+        - AdminBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminConfigUpdate'
+      responses:
+        '200':
+          description: Config persisted and restart is required
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminConfigSnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          description: Admin backend is disabled or not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   headers:
     XRequestId:
@@ -247,6 +319,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: DeadlinerAccessToken
+    AdminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: DeadlinerAdminToken
   responses:
     BadRequest:
       description: Request validation failed
@@ -613,3 +689,95 @@ components:
             $ref: '#/components/schemas/HabitChange'
         next_cursor:
           type: string
+    ServiceConfig:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+    HTTPConfig:
+      type: object
+      properties:
+        address:
+          type: string
+        readTimeoutSeconds:
+          type: integer
+        writeTimeoutSeconds:
+          type: integer
+        idleTimeoutSeconds:
+          type: integer
+        maxRequestBodyBytes:
+          type: integer
+        rateLimitPerMinute:
+          type: integer
+        rateLimitBurst:
+          type: integer
+        authRateLimitPerMinute:
+          type: integer
+        authRateLimitBurst:
+          type: integer
+        syncRateLimitPerMinute:
+          type: integer
+        syncRateLimitBurst:
+          type: integer
+    DatabaseConfig:
+      type: object
+      properties:
+        driver:
+          type: string
+    SyncConfig:
+      type: object
+      properties:
+        defaultPullLimit:
+          type: integer
+          format: int32
+        maxPullLimit:
+          type: integer
+          format: int32
+    AdminConfigPublic:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        basePath:
+          type: string
+    SecretStatus:
+      type: object
+      properties:
+        accessTokenSecretConfigured:
+          type: boolean
+        databaseDSNConfigured:
+          type: boolean
+        adminTokenConfigured:
+          type: boolean
+    AdminConfigSnapshot:
+      type: object
+      properties:
+        service:
+          $ref: '#/components/schemas/ServiceConfig'
+        http:
+          $ref: '#/components/schemas/HTTPConfig'
+        database:
+          $ref: '#/components/schemas/DatabaseConfig'
+        sync:
+          $ref: '#/components/schemas/SyncConfig'
+        admin:
+          $ref: '#/components/schemas/AdminConfigPublic'
+        secretStatus:
+          $ref: '#/components/schemas/SecretStatus'
+        restartRequired:
+          type: boolean
+    AdminConfigUpdate:
+      type: object
+      properties:
+        service:
+          $ref: '#/components/schemas/ServiceConfig'
+        http:
+          $ref: '#/components/schemas/HTTPConfig'
+        database:
+          $ref: '#/components/schemas/DatabaseConfig'
+        sync:
+          $ref: '#/components/schemas/SyncConfig'
+        admin:
+          $ref: '#/components/schemas/AdminConfigPublic'

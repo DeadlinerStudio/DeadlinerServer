@@ -16,6 +16,9 @@ The documented surface currently covers the first public HTTP endpoints:
 - `GET /v1/sync/pull`
 - `POST /v1/sync/push`
 - `GET /healthz`
+- `GET /admin/config`
+- `GET /admin/api/config`
+- `PUT /admin/api/config`
 
 ## Security Defaults
 
@@ -28,6 +31,16 @@ handlers:
 - per-client in-memory rate limits
 - request IDs on every response
 - generic 5xx responses that avoid leaking internal details
+
+## Config Admin
+
+The first config backend is intentionally small:
+
+- an HTML page at `/admin/config`
+- a protected JSON API at `/admin/api/config`
+- only non-sensitive runtime config is editable
+- secret values stay in `conf/secret.json`
+- server restart is required after saving updates
 
 ## Notes
 
