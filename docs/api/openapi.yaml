@@ -1,0 +1,615 @@
+openapi: 3.0.3
+info:
+  title: DeadlinerServer HTTP API
+  version: 0.1.0
+  description: |
+    Self-hosted Deadliner backend HTTP API.
+
+    This contract describes the current public HTTP surface used by mobile
+    clients. Sync endpoints are backend-first and require a bearer access
+    token.
+servers:
+  - url: http://127.0.0.1:8080
+tags:
+  - name: Health
+  - name: Auth
+  - name: Sync
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthz
+      responses:
+        '200':
+          description: Server is healthy
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new account and create a session
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Registration succeeded
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Account already exists or device conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and create a fresh session
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login succeeded
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh a session using a refresh token
+      operationId: refreshSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshSessionRequest'
+      responses:
+        '200':
+          description: Refresh succeeded
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Device mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/sync/pull:
+    get:
+      tags: [Sync]
+      summary: Pull committed sync changes after a cursor
+      operationId: pullChanges
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: device_uid
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+            example: "42"
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: include_deleted
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Pull succeeded
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PullChangesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /v1/sync/push:
+    post:
+      tags: [Sync]
+      summary: Push one or more mutations to the canonical server log
+      operationId: pushChanges
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushChangesRequest'
+      responses:
+        '200':
+          description: Push succeeded
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushChangesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/RequestTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+components:
+  headers:
+    XRequestId:
+      description: Request correlation ID generated or accepted by the server
+      schema:
+        type: string
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: DeadlinerAccessToken
+  responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid access token
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedMediaType:
+      description: Content type must be application/json
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RequestTooLarge:
+      description: Request body exceeded the configured limit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: Per-client rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: string
+            example: "60"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: unauthorized
+        request_id:
+          type: string
+          example: 7fa5c4e0cb3d4b1a
+    Session:
+      type: object
+      required: [account_uid, access_token, refresh_token, expires_at]
+      properties:
+        account_uid:
+          type: string
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    SessionEnvelope:
+      type: object
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+    RegisterRequest:
+      type: object
+      required: [email, password, display_name, device_uid, device_name, platform]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        display_name:
+          type: string
+        device_uid:
+          type: string
+        device_name:
+          type: string
+        platform:
+          type: string
+          example: ios
+    LoginRequest:
+      type: object
+      required: [email, password, device_uid, device_name, platform]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        device_uid:
+          type: string
+        device_name:
+          type: string
+        platform:
+          type: string
+    RefreshSessionRequest:
+      type: object
+      required: [refresh_token, device_uid]
+      properties:
+        refresh_token:
+          type: string
+        device_uid:
+          type: string
+    ClientVersion:
+      type: object
+      properties:
+        ts:
+          type: string
+        ctr:
+          type: integer
+          format: int32
+        dev:
+          type: string
+    ServerVersion:
+      type: object
+      properties:
+        change_id:
+          type: integer
+          format: int64
+        committed_at:
+          type: string
+          format: date-time
+    SubTask:
+      type: object
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+        is_completed:
+          type: boolean
+        sort_order:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    DeadlineDocument:
+      type: object
+      properties:
+        uid:
+          type: string
+        legacy_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        start_time:
+          type: string
+        end_time:
+          type: string
+        state:
+          type: string
+        complete_time:
+          type: string
+        note:
+          type: string
+        is_stared:
+          type: boolean
+        type:
+          type: string
+        habit_count:
+          type: integer
+          format: int32
+        habit_total_count:
+          type: integer
+          format: int32
+        calendar_event:
+          type: integer
+          format: int64
+        timestamp:
+          type: string
+          format: date-time
+        sub_tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubTask'
+    HabitConfig:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        icon_key:
+          type: string
+        period:
+          type: string
+        times_per_period:
+          type: integer
+          format: int32
+        goal_type:
+          type: string
+        total_target:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        sort_order:
+          type: integer
+          format: int32
+        alarm_time:
+          type: string
+      description: Habit display color is local-only and is not synchronized.
+    HabitRecord:
+      type: object
+      properties:
+        date:
+          type: string
+          example: "2026-06-24"
+        count:
+          type: integer
+          format: int32
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    HabitDocument:
+      type: object
+      properties:
+        ddl_uid:
+          type: string
+        habit:
+          $ref: '#/components/schemas/HabitConfig'
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabitRecord'
+    DeadlinePatch:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+        doc:
+          $ref: '#/components/schemas/DeadlineDocument'
+    HabitPatch:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+        doc:
+          $ref: '#/components/schemas/HabitDocument'
+    Mutation:
+      type: object
+      required: [mutation_id, device_uid, entity_uid]
+      properties:
+        mutation_id:
+          type: string
+        device_uid:
+          type: string
+        entity_uid:
+          type: string
+        client_version:
+          $ref: '#/components/schemas/ClientVersion'
+        base_change_id:
+          type: integer
+          format: int64
+        deadline:
+          $ref: '#/components/schemas/DeadlinePatch'
+        habit:
+          $ref: '#/components/schemas/HabitPatch'
+      description: Exactly one of deadline or habit should be provided.
+    MutationResult:
+      type: object
+      properties:
+        mutation_id:
+          type: string
+        entity_uid:
+          type: string
+        accepted:
+          type: boolean
+        rejection_reason:
+          type: string
+        server_version:
+          $ref: '#/components/schemas/ServerVersion'
+        replayed:
+          type: boolean
+        status:
+          type: string
+    DeadlineChange:
+      type: object
+      properties:
+        entity_uid:
+          type: string
+        deleted:
+          type: boolean
+        server_version:
+          $ref: '#/components/schemas/ServerVersion'
+        doc:
+          $ref: '#/components/schemas/DeadlineDocument'
+    HabitChange:
+      type: object
+      properties:
+        entity_uid:
+          type: string
+        deleted:
+          type: boolean
+        server_version:
+          $ref: '#/components/schemas/ServerVersion'
+        doc:
+          $ref: '#/components/schemas/HabitDocument'
+    PullChangesResponse:
+      type: object
+      properties:
+        deadline_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeadlineChange'
+        habit_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabitChange'
+        next_cursor:
+          type: string
+        has_more:
+          type: boolean
+    PushChangesRequest:
+      type: object
+      properties:
+        device_uid:
+          type: string
+        base_cursor:
+          type: string
+        mutations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Mutation'
+    PushChangesResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MutationResult'
+        deadline_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeadlineChange'
+        habit_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabitChange'
+        next_cursor:
+          type: string

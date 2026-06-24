@@ -7,7 +7,14 @@
     "address": ":8080",
     "readTimeoutSeconds": 15,
     "writeTimeoutSeconds": 15,
-    "idleTimeoutSeconds": 60
+    "idleTimeoutSeconds": 60,
+    "maxRequestBodyBytes": 1048576,
+    "rateLimitPerMinute": 240,
+    "rateLimitBurst": 60,
+    "authRateLimitPerMinute": 30,
+    "authRateLimitBurst": 10,
+    "syncRateLimitPerMinute": 240,
+    "syncRateLimitBurst": 60
   },
   "auth": {
     "accessTokenTTLMinutes": 1440,

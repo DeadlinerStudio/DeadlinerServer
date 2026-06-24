@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	httpmiddleware "github.com/aritxonly/deadlinerserver/internal/app/transport/http/middleware"
 	"github.com/aritxonly/deadlinerserver/internal/utils/logutil"
 	"github.com/cloudwego/hertz/pkg/app"
 )
@@ -29,13 +30,19 @@ func AccessLog() app.HandlerFunc {
 		if route != "" && route != path {
 			routeSuffix = " route=" + route
 		}
+		accountSuffix := ""
+		if accountUID := httpmiddleware.AccountUID(c); accountUID != "" {
+			accountSuffix = " account=" + accountUID
+		}
 
 		log.Printf(
-			"HTTP %d %s %s%s dur=%s ip=%s bytes=%d/%d ua=%q",
+			"HTTP rid=%s %d %s %s%s%s dur=%s ip=%s bytes=%d/%d ua=%q",
+			httpmiddleware.RequestIDFromContext(c),
 			c.Response.StatusCode(),
 			method,
 			path,
 			routeSuffix,
+			accountSuffix,
 			logutil.Duration(time.Since(startedAt)),
 			clientIP,
 			reqBytes,

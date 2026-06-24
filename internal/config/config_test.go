@@ -51,6 +51,18 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.HTTP.ReadTimeoutSeconds == 0 || cfg.HTTP.WriteTimeoutSeconds == 0 || cfg.HTTP.IdleTimeoutSeconds == 0 {
 		t.Fatal("expected http timeout defaults")
 	}
+	if cfg.HTTP.MaxRequestBodyBytes == 0 {
+		t.Fatal("expected max request body default")
+	}
+	if cfg.HTTP.RateLimitPerMinute == 0 || cfg.HTTP.RateLimitBurst == 0 {
+		t.Fatal("expected http rate limit defaults")
+	}
+	if cfg.HTTP.AuthRateLimitPerMinute == 0 || cfg.HTTP.AuthRateLimitBurst == 0 {
+		t.Fatal("expected auth rate limit defaults")
+	}
+	if cfg.HTTP.SyncRateLimitPerMinute == 0 || cfg.HTTP.SyncRateLimitBurst == 0 {
+		t.Fatal("expected sync rate limit defaults")
+	}
 	if cfg.Auth.AccessTokenSecret != "test-secret" {
 		t.Fatalf("unexpected access token secret: %s", cfg.Auth.AccessTokenSecret)
 	}

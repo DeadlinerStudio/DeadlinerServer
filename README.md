@@ -42,6 +42,7 @@ The initial architecture and delivery plan lives at:
 - [docs/plan/0001-foundation/README.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0001-foundation/README.md)
 - [docs/plan/0002-sync-product-shape/README.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0002-sync-product-shape/README.md)
 - [docs/plan/0003-idempotency-and-convergence/README.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/plan/0003-idempotency-and-convergence/README.md)
+- [docs/api/README.md](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/api/README.md)
 
 ## Layout
 
@@ -108,12 +109,32 @@ starting the stack.
 
 The server now emits lightweight interface access logs for both transports:
 
-- `HTTP_ACCESS ...` for Hertz HTTP requests
-- `KITEX_ACCESS ...` for Kitex RPC requests
+- `HTTP ...` for Hertz HTTP requests
+- `KITEX ...` for Kitex RPC requests
 
 The logs intentionally record only metadata such as method, route, status,
 latency, caller IP / address, and payload size. They do not print request
 bodies, passwords, or tokens.
+
+## API Docs
+
+HTTP API documentation now lives in:
+
+- [docs/api/openapi.yaml](/Users/aritxonly/Codes/Golang/DeadlinerServer/docs/api/openapi.yaml)
+
+The OpenAPI document currently covers health, auth, and sync endpoints.
+
+## HTTP Security
+
+The Hertz server now enables a small default security middleware chain:
+
+- request IDs on every response
+- generic 5xx error bodies with `request_id`
+- bearer token enforcement on `/v1/sync/*`
+- `application/json` enforcement on write endpoints
+- request body size limits
+- in-memory per-client rate limits
+- conservative security headers for API responses
 
 ## Docker
 

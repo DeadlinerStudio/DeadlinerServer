@@ -26,10 +26,17 @@ type ServiceConfig struct {
 }
 
 type HTTPConfig struct {
-	Address             string
-	ReadTimeoutSeconds  int
-	WriteTimeoutSeconds int
-	IdleTimeoutSeconds  int
+	Address                string
+	ReadTimeoutSeconds     int
+	WriteTimeoutSeconds    int
+	IdleTimeoutSeconds     int
+	MaxRequestBodyBytes    int
+	RateLimitPerMinute     int
+	RateLimitBurst         int
+	AuthRateLimitPerMinute int
+	AuthRateLimitBurst     int
+	SyncRateLimitPerMinute int
+	SyncRateLimitBurst     int
 }
 
 type DatabaseConfig struct {
@@ -70,10 +77,17 @@ func Default() Config {
 			Address: ":8888",
 		},
 		HTTP: HTTPConfig{
-			Address:             ":8080",
-			ReadTimeoutSeconds:  15,
-			WriteTimeoutSeconds: 15,
-			IdleTimeoutSeconds:  60,
+			Address:                ":8080",
+			ReadTimeoutSeconds:     15,
+			WriteTimeoutSeconds:    15,
+			IdleTimeoutSeconds:     60,
+			MaxRequestBodyBytes:    1 << 20,
+			RateLimitPerMinute:     240,
+			RateLimitBurst:         60,
+			AuthRateLimitPerMinute: 30,
+			AuthRateLimitBurst:     10,
+			SyncRateLimitPerMinute: 240,
+			SyncRateLimitBurst:     60,
 		},
 		Auth: AuthConfig{
 			AccessTokenTTLMinutes: 60 * 24,
@@ -111,6 +125,27 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.HTTP.IdleTimeoutSeconds == 0 {
 		c.HTTP.IdleTimeoutSeconds = defaults.HTTP.IdleTimeoutSeconds
+	}
+	if c.HTTP.MaxRequestBodyBytes == 0 {
+		c.HTTP.MaxRequestBodyBytes = defaults.HTTP.MaxRequestBodyBytes
+	}
+	if c.HTTP.RateLimitPerMinute == 0 {
+		c.HTTP.RateLimitPerMinute = defaults.HTTP.RateLimitPerMinute
+	}
+	if c.HTTP.RateLimitBurst == 0 {
+		c.HTTP.RateLimitBurst = defaults.HTTP.RateLimitBurst
+	}
+	if c.HTTP.AuthRateLimitPerMinute == 0 {
+		c.HTTP.AuthRateLimitPerMinute = defaults.HTTP.AuthRateLimitPerMinute
+	}
+	if c.HTTP.AuthRateLimitBurst == 0 {
+		c.HTTP.AuthRateLimitBurst = defaults.HTTP.AuthRateLimitBurst
+	}
+	if c.HTTP.SyncRateLimitPerMinute == 0 {
+		c.HTTP.SyncRateLimitPerMinute = defaults.HTTP.SyncRateLimitPerMinute
+	}
+	if c.HTTP.SyncRateLimitBurst == 0 {
+		c.HTTP.SyncRateLimitBurst = defaults.HTTP.SyncRateLimitBurst
 	}
 	if c.Auth.AccessTokenTTLMinutes == 0 {
 		c.Auth.AccessTokenTTLMinutes = defaults.Auth.AccessTokenTTLMinutes
